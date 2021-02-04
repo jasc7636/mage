@@ -1,25 +1,13 @@
 package mage.cards.a;
 
-import java.util.EnumSet;
-import java.util.Iterator;
-import java.util.Set;
-import java.util.UUID;
 import mage.MageObject;
 import mage.abilities.Ability;
 import mage.abilities.effects.AsThoughEffectImpl;
 import mage.abilities.effects.OneShotEffect;
-import mage.cards.Card;
-import mage.cards.CardImpl;
-import mage.cards.CardSetInfo;
-import mage.cards.Cards;
-import mage.cards.CardsImpl;
+import mage.cards.*;
 import mage.choices.Choice;
 import mage.choices.ChoiceImpl;
-import mage.constants.AsThoughEffectType;
-import mage.constants.CardType;
-import mage.constants.Duration;
-import mage.constants.Outcome;
-import mage.constants.Zone;
+import mage.constants.*;
 import mage.filter.StaticFilters;
 import mage.game.ExileZone;
 import mage.game.Game;
@@ -27,6 +15,11 @@ import mage.players.Player;
 import mage.target.TargetCard;
 import mage.target.targetpointer.FixedTarget;
 import mage.util.CardUtil;
+
+import java.util.EnumSet;
+import java.util.Iterator;
+import java.util.Set;
+import java.util.UUID;
 
 /**
  *
@@ -79,8 +72,14 @@ class AminatousAuguryEffect extends OneShotEffect {
         MageObject sourceObject = source.getSourceObject(game);
         if (controller != null && sourceObject != null) {
             // move cards from library to exile
-            controller.moveCardsToExile(controller.getLibrary().getTopCards(game, 8), source, game, true, source.getSourceId(), CardUtil.createObjectRealtedWindowTitle(source, game, null));
-            ExileZone auguryExileZone = game.getExile().getExileZone(source.getSourceId());
+            int zoneChangeCounter = 0;
+            Card sourceCard = game.getCard(source.getSourceId());
+            if (sourceCard != null) {
+                zoneChangeCounter = sourceCard.getZoneChangeCounter(game);
+            }
+            UUID exileId = CardUtil.getExileZoneId(game, source.getId(), zoneChangeCounter);
+            controller.moveCardsToExile(controller.getLibrary().getTopCards(game, 8), source, game, true, exileId, CardUtil.createObjectRealtedWindowTitle(source, game, null));
+            ExileZone auguryExileZone = game.getExile().getExileZone(exileId);
             if (auguryExileZone == null) {
                 return true;
             }
@@ -103,7 +102,7 @@ class AminatousAuguryEffect extends OneShotEffect {
                 }
             }
             for (Card card : cardsToCast.getCards(StaticFilters.FILTER_CARD_NON_LAND, game)) {
-                AminatousAuguryCastFromExileEffect effect = new AminatousAuguryCastFromExileEffect();
+                AminatousAuguryCastFromExileEffect effect = new AminatousAuguryCastFromExileEffect(exileId);
                 effect.setTargetPointer(new FixedTarget(card, game));
                 game.addEffect(effect, source);
             }
@@ -113,14 +112,17 @@ class AminatousAuguryEffect extends OneShotEffect {
 }
 
 class AminatousAuguryCastFromExileEffect extends AsThoughEffectImpl {
+    private UUID exileId;
 
-    public AminatousAuguryCastFromExileEffect() {
+    public AminatousAuguryCastFromExileEffect(UUID exileId) {
         super(AsThoughEffectType.PLAY_FROM_NOT_OWN_HAND_ZONE, Duration.EndOfTurn, Outcome.PlayForFree);
         staticText = "Cast this card without paying its mana cost";
+        this.exileId = exileId;
     }
 
     public AminatousAuguryCastFromExileEffect(final AminatousAuguryCastFromExileEffect effect) {
         super(effect);
+        this.exileId = effect.exileId;
     }
 
     @Override
@@ -138,8 +140,8 @@ class AminatousAuguryCastFromExileEffect extends AsThoughEffectImpl {
         Player player = game.getPlayer(affectedControllerId);
         EnumSet<CardType> usedCardTypes = EnumSet.noneOf(CardType.class);
 
-        if (game.getState().getValue(source.getSourceId().toString() + "cardTypes") != null) {
-            usedCardTypes = (EnumSet<CardType>) game.getState().getValue(source.getSourceId().toString() + "cardTypes");
+        if (game.getState().getValue(exileId.toString() + "cardTypes") != null) {
+            usedCardTypes = (EnumSet<CardType>) game.getState().getValue(exileId.toString() + "cardTypes");
         }
         if (player != null
                 && objectId != null
@@ -174,7 +176,7 @@ class AminatousAuguryCastFromExileEffect extends AsThoughEffectImpl {
                             usedCardTypes.add(CardType.fromString(choice.getChoice()));
                         }
                         usedCardTypes.addAll(unusedCardTypes);                        
-                        game.getState().setValue(source.getSourceId().toString() + "cardTypes", usedCardTypes);
+                        game.getState().setValue(exileId.toString() + "cardTypes", usedCardTypes);
                     }
                     player.setCastSourceIdWithAlternateMana(objectId, null, card.getSpellAbility().getCosts());
                     return true;
